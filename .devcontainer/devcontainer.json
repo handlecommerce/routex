@@ -1,0 +1,14 @@
+{
+	"name": "Elixir 1.14",
+	"build": {
+		"dockerfile": "Dockerfile"
+	},
+	"workspaceFolder": "/workspaces/routex",
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"JakeBecker.elixir-ls"
+			]
+		}
+	}
+}
