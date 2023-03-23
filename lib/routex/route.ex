@@ -102,7 +102,7 @@ defmodule Routex.Route do
 
     case String.split(name, ":") do
       [name, regex_string] ->
-        case Regex.compile(regex_string) do
+        case Regex.compile(regex_string <> "$") do
           {:ok, regex} ->
             {type, name, regex}
 

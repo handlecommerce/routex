@@ -17,7 +17,7 @@ defmodule Routex.RouteTest do
     assert %Route{
              segments: [
                {:segment, "hello"},
-               {:parameter, "name", ~r/^[a-z]+/},
+               {:parameter, "name", ~r/^[a-z]+$/},
                {:segment, "world"}
              ],
              data: :hello_world
@@ -72,5 +72,17 @@ defmodule Routex.RouteTest do
     assert {:ok, %{"name" => "joe"}} == Route.match(route, URI.parse("/hello/joe/world"))
     assert :no_match == Route.match(route, URI.parse("/hello/JOE/world"))
     assert :no_match == Route.match(route, URI.parse("/hello/123/world"))
+  end
+
+  test "match/2 with wildcard and regex" do
+    route = Route.build(~s(/hello/{*name:[a-z]+}/world), :hello_world)
+    assert {:ok, %{"name" => "joe"}} == Route.match(route, URI.parse("/hello/joe/world"))
+
+    assert {:ok, %{"name" => "joe/and/again"}} ==
+             Route.match(route, URI.parse("/hello/joe/and/again/world"))
+
+    assert :no_match == Route.match(route, URI.parse("/hello/JOE/world"))
+    assert :no_match == Route.match(route, URI.parse("/hello/123/world"))
+    assert :no_match == Route.match(route, URI.parse("/hello/joe/123/world"))
   end
 end
