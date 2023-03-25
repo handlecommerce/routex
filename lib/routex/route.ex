@@ -1,10 +1,12 @@
 defmodule Routex.Route do
   defstruct [:segments, :data]
 
+  alias Routex.Parser
+
   @type segment_t ::
           {:segment, String.t()}
-          | {:parameter, String.t(), Regex.t() | nil}
-          | {:glob, String.t(), Regex.t() | nil}
+          | {:parameter, [identifier: String.t()]}
+          | {:parameter, [identifier: String.t(), pattern: Regex.t()]}
 
   @type t :: %__MODULE__{
           segments: [segment_t],
@@ -16,11 +18,7 @@ defmodule Routex.Route do
   Build a route from a path. Includes the data you want to associate with the route.
   """
   def build(path, data \\ nil) do
-    segments =
-      path
-      |> String.split("/")
-      |> Enum.reject(&(&1 == ""))
-      |> Enum.map(&parse_segment/1)
+    {:ok, segments, _, _, _, _} = Parser.route(path)
 
     %__MODULE__{segments: segments, data: data}
   end
@@ -33,88 +31,50 @@ defmodule Routex.Route do
   the parameters extracted from the path.
   """
   def match(%__MODULE__{segments: segments}, %URI{path: path, query: query}) do
-    parts =
-      path
-      |> String.split("/")
-      |> Enum.reject(&(&1 == ""))
-
-    params = if is_nil(query), do: %{}, else: URI.decode_query(query)
-
-    match_segments(params, segments, parts)
+    (query || "")
+    |> URI.decode_query()
+    |> match_segments(segments, path)
   end
 
-  defp match_segments(params, [], []), do: {:ok, params}
+  defp match_segments(params, [], "/"), do: {:ok, params}
   defp match_segments(_params, [], _), do: :no_match
-  defp match_segments(_params, _, []), do: :no_match
+  defp match_segments(_params, _, "/"), do: :no_match
 
-  defp match_segments(params, [{:segment, name} | segments], [name | parts]),
-    do: match_segments(params, segments, parts)
-
-  defp match_segments(params, [{:parameter, name, regex} | segments], [value | parts]) do
-    if segment_matches?(value, regex) do
-      match_segments(Map.put(params, name, value), segments, parts)
-    else
-      :no_match
+  defp match_segments(params, [{:segment, name} | segments], "/" <> path) do
+    path
+    |> String.split("/", parts: 2)
+    |> case do
+      [^name, rest] -> match_segments(params, segments, "/" <> rest)
+      [^name] -> match_segments(params, segments, "/")
+      _ -> :no_match
     end
   end
 
-  defp match_segments(params, [{:glob, name, regex} | segments], parts) do
-    case List.first(segments) do
-      nil ->
-        {:ok, Map.put(params, name, Enum.join(parts, "/"))}
+  defp match_segments(params, [{:parameter, [identifier: identifier]} | segments], "/" <> path) do
+    path
+    |> String.split("/", parts: 2)
+    |> case do
+      [value, rest] -> match_segments(Map.put(params, identifier, value), segments, "/" <> rest)
+      [value] -> match_segments(Map.put(params, identifier, value), segments, "/")
+      _ -> :no_match
+    end
+  end
 
-      {:segment, next_name} ->
-        {globbed_parts, parts} = Enum.split_while(parts, &(&1 != next_name))
-
-        segment = Enum.join(globbed_parts, "/")
-
-        if segment_matches?(segment, regex) do
-          match_segments(Map.put(params, name, segment), segments, parts)
-        else
-          :no_match
-        end
+  defp match_segments(
+         params,
+         [{:parameter, [identifier: identifier, pattern: pattern]} | segments],
+         "/" <> path
+       ) do
+    case Regex.run(pattern, path, capture: :first) do
+      [value] ->
+        params = Map.put(params, identifier, value)
+        path = String.replace(path, value, "", global: false)
+        match_segments(params, segments, path)
 
       _ ->
-        {:error, "Glob followed by a non-segment is not supported"}
+        :no_match
     end
   end
 
-  # Compare the match to the regex, allowing nil regex to match anything
-  defp segment_matches?("", _regex), do: false
-  defp segment_matches?(_segment, nil), do: true
-  defp segment_matches?(segment, regex), do: Regex.match?(regex, segment)
-
-  defp parse_segment("*" <> name), do: {:glob, name}
-
-  defp parse_segment("{" <> name_and_close_brace) do
-    if String.ends_with?(name_and_close_brace, "}") do
-      parse_match_segment(String.slice(name_and_close_brace, 0..-2))
-    else
-      {:error, "Invalid route: {#{name_and_close_brace}"}
-    end
-  end
-
-  defp parse_segment(name), do: {:segment, name}
-
-  defp parse_match_segment(name) do
-    type = if String.starts_with?(name, "*"), do: :glob, else: :parameter
-    name = if type == :glob, do: String.slice(name, 1..-1), else: name
-
-    case String.split(name, ":") do
-      [name, regex_string] ->
-        case Regex.compile(regex_string <> "$") do
-          {:ok, regex} ->
-            {type, name, regex}
-
-          {:error, error} ->
-            {:error, "Invalid route: {#{name}:#{regex_string} (#{error})"}
-        end
-
-      [name] ->
-        {type, name, nil}
-
-      _ ->
-        {:error, "Invalid route: {#{name}"}
-    end
-  end
+  defp match_segments(_, _, _), do: :no_match
 end

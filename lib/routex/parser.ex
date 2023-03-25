@@ -4,12 +4,21 @@ defmodule Routex.Parser do
   identifier =
     utf8_string([?a..?z, ?A..?Z, ?_], 1)
     |> concat(utf8_string([?a..?z, ?A..?Z, ?0..?9, ?_, ?-], min: 0))
+    |> reduce({Enum, :join, []})
     |> unwrap_and_tag(:identifier)
 
-  # :regex
-  regex_pattern =
+  # :regex_pattern
+  regex_pattern_escaped =
     ignore(string(":"))
-    |> concat(utf8_string([not: ?}], min: 1))
+    |> repeat(
+      lookahead_not(
+        choice([
+          string("}/"),
+          string("}") |> eos()
+        ])
+      )
+      |> utf8_string([], 1)
+    )
     |> reduce({Enum, :join, []})
     |> post_traverse(:to_regex)
     |> unwrap_and_tag(:pattern)
@@ -19,7 +28,7 @@ defmodule Routex.Parser do
   parameter_segment =
     ignore(string("{"))
     |> concat(identifier)
-    |> optional(regex_pattern)
+    |> optional(regex_pattern_escaped)
     |> ignore(string("}"))
     |> tag(:parameter)
 
@@ -40,14 +49,12 @@ defmodule Routex.Parser do
   defparsec(:route, choice([segment_list, empty_segment]) |> eos())
 
   # Convert the regex pattern string to a regex
-  defp to_regex(rest, pattern, context, _line, _offset) do
-    pattern = Enum.join(pattern)
-
+  defp to_regex(rest, [pattern], context, _line, _offset) do
     # Keep the original pattern for error message
     original_pattern = pattern
 
+    # Make sure we capture the entire string with ^
     pattern = if String.starts_with?(pattern, "^"), do: pattern, else: "^" <> pattern
-    pattern = if String.ends_with?(pattern, "$"), do: pattern, else: pattern <> "$"
 
     case Regex.compile(pattern) do
       {:ok, regex} -> {rest, [regex], context}

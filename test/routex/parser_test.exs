@@ -1,5 +1,5 @@
 defmodule Routex.ParserTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
 
   alias Routex.Parser
 
@@ -18,7 +18,7 @@ defmodule Routex.ParserTest do
     assert {:ok,
             [
               segment: "hello",
-              parameter: [identifier: "name", pattern: ~r/^[a-z]+$/],
+              parameter: [identifier: "name", pattern: ~r/^[a-z]+/],
               segment: "world"
             ], "", _, _, _} = Parser.route("/hello/{name:^[a-z]+}/world")
   end
@@ -27,8 +27,19 @@ defmodule Routex.ParserTest do
     assert {:ok,
             [
               segment: "hello",
-              parameter: [identifier: "name", pattern: ~r/^[a-z\/]+$/],
+              parameter: [identifier: "name", pattern: ~r/^[a-z\/]+/],
               segment: "world"
-            ], "", _, _, _} = Parser.route("/hello/{name:^[a-z\/]+}/world")
+            ], "", _, _, _} = Parser.route("/hello/{name:[a-z\/]+}/world")
+  end
+
+  test "parse route with regex that contains forward slash and curly braces" do
+    assert {:ok,
+            [
+              segment: "hello",
+              parameter: [identifier: "name", pattern: pattern],
+              segment: "world"
+            ], "", _, _, _} = Parser.route(~S"/hello/{name:[a-z\/{}]+}/world")
+
+    assert pattern.source == "^[a-z\\/{}]+"
   end
 end
