@@ -33,4 +33,11 @@ defmodule Routex.RouteTest do
     assert :no_match == Route.match(route, URI.parse("/hello/123/world"))
     assert :no_match == Route.match(route, URI.parse("/hello/joe1/world"))
   end
+
+  test "match/2 with catch-all clause" do
+    route = Route.build("/hello/{name:^[a-z]+}/world/*rest", :hello_world)
+
+    assert {:ok, %{"name" => "joe", "foo" => "bar", "rest" => "and/again"}} ==
+             Route.match(route, URI.parse("/hello/joe/world/and/again?foo=bar"))
+  end
 end

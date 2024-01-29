@@ -1,4 +1,8 @@
 defmodule Routex.Parser do
+  @moduledoc """
+  Parse a route pattern into a list of segments.
+  """
+
   import NimbleParsec
 
   identifier =
@@ -35,15 +39,26 @@ defmodule Routex.Parser do
   # / only
   empty_segment = ignore(string("/")) |> eos()
 
+  # /segment
   non_parameterized_segment =
     lookahead_not(string("{"))
     |> utf8_string([not: ?/], min: 1)
     |> unwrap_and_tag(:segment)
 
-  segment =
-    ignore(string("/"))
-    |> choice([parameter_segment, non_parameterized_segment])
+  # *identifier
+  catch_all_segment =
+    ignore(string("*"))
+    |> concat(identifier)
+    |> eos()
+    |> tag(:catch_all)
 
+  # /*identifier or /{identifier} or /{identifier:regex} or /segment
+  segment =
+    string("/")
+    |> ignore()
+    |> choice([catch_all_segment, parameter_segment, non_parameterized_segment])
+
+  # /segment1/segment2/{segment:3}/*segment4
   segment_list = times(segment, min: 1)
 
   defparsec(:route, choice([segment_list, empty_segment]) |> eos())

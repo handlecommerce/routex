@@ -1,4 +1,7 @@
 defmodule Routex.Route do
+  @moduledoc """
+  A route is a path with parameters. For example, `/hello/{name}/world` is a route.
+  """
   defstruct [:segments, :data]
 
   alias Routex.Parser
@@ -58,6 +61,13 @@ defmodule Routex.Route do
       [value] -> match_segments(Map.put(params, identifier, value), segments, "/")
       _ -> :no_match
     end
+  end
+
+  # Match to /*rest
+  defp match_segments(params, [{:catch_all, [identifier: identifier]} | []], "/" <> value) do
+    params
+    |> Map.put(identifier, value)
+    |> match_segments([], "/")
   end
 
   defp match_segments(
