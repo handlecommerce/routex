@@ -16,14 +16,15 @@ defmodule Routex.Route do
           data: term
         }
 
-  @spec build(String.t(), term) :: t
+  @spec build(String.t(), term) :: {:ok, t} | {:error, String.t()}
   @doc """
   Build a route from a path. Includes the data you want to associate with the route.
   """
   def build(path, data \\ nil) do
-    {:ok, segments, _, _, _, _} = Parser.route(path)
-
-    %__MODULE__{segments: segments, data: data}
+    case Parser.route(path) do
+      {:ok, segments, _, _, _, _} -> {:ok, %__MODULE__{segments: segments, data: data}}
+      {:error, _, _, _, _, _} -> {:error, "Invalid route"}
+    end
   end
 
   @spec match(t(), URI.t()) :: {:ok, map} | :no_match | {:error, String.t()}
